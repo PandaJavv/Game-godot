@@ -96,19 +96,11 @@ jobs:
       - name: Configure Godot editor settings
         run: |
           mkdir -p ~/.config/godot
-          cat > ~/.config/godot/editor_settings-4.tres << EOF
-[gd_resource type="EditorSettings" format=3]
-
-[resource]
-export/android/android_sdk_path = "$ANDROID_SDK_ROOT"
-export/android/debug_keystore = "$GITHUB_WORKSPACE/debug.keystore"
-export/android/debug_keystore_user = "androiddebugkey"
-export/android/debug_keystore_pass = "android"
-export/android/force_system_user = false
-export/android/shutdown_adb_on_exit = true
-export/android/java_sdk_path = "$JAVA_HOME"
-EOF
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\nexport/android/force_system_user = false\nexport/android/shutdown_adb_on_exit = true\nexport/android/java_sdk_path = "%s"\n' \
+            "$ANDROID_SDK_ROOT" "$GITHUB_WORKSPACE" "$JAVA_HOME" \
+            > ~/.config/godot/editor_settings-4.tres
           echo "✅ Editor settings written"
+          cat ~/.config/godot/editor_settings-4.tres
 
       # ─── Install Android Build Template ──────────────────────────────────────
       - name: Install Godot Android build template into project
