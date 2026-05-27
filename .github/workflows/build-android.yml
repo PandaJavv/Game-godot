@@ -54,7 +54,7 @@ jobs:
           path: |
             ~/godot-bin
             ~/.local/share/godot/export_templates
-          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-v3
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-v4
 
       - name: Download Godot & export templates
         if: steps.cache-godot.outputs.cache-hit != 'true'
@@ -75,26 +75,60 @@ jobs:
         run: |
           mkdir -p ~/.config/godot
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$ANDROID_HOME" "$HOME" > ~/.config/godot/editor_settings-4.tres
+          echo "=== Editor settings ==="
           cat ~/.config/godot/editor_settings-4.tres
 
-      - name: Patch export_presets.cfg for CI
+      - name: Debug environment
         run: |
+          echo "=== ANDROID_HOME ==="
+          echo "$ANDROID_HOME"
+          echo "=== Android SDK contents ==="
+          ls $ANDROID_HOME/
+          echo "=== Build tools ==="
+          ls $ANDROID_HOME/build-tools/ || echo "No build-tools"
+          echo "=== Platforms ==="
+          ls $ANDROID_HOME/platforms/ || echo "No platforms"
+          echo "=== Godot templates ==="
+          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}/ | grep -i android
+          echo "=== export_presets.cfg ==="
+          cat export_presets.cfg
+          echo "=== project.godot ==="
+          cat project.godot
+          echo "=== All project.godot files ==="
+          find . -name "project.godot"
+
+      - name: Remove duplicate project folder
+        run: |
+          # Remove any nested folder that contains another project.godot
+          find . -mindepth 2 -name "project.godot" -exec dirname {} \; | xargs -I{} rm -rf {}
+          echo "Remaining project.godot files:"
+          find . -name "project.godot"
+
+      - name: Fix export_presets.cfg
+        run: |
+          # Remove lines that require gradle build
+          sed -i '/gradle_build\/min_sdk/d' export_presets.cfg
+          sed -i '/gradle_build\/target_sdk/d' export_presets.cfg
+          sed -i '/gradle_build\/export_format/d' export_presets.cfg
           sed -i 's/gradle_build\/use_gradle_build=true/gradle_build\/use_gradle_build=false/' export_presets.cfg
-          grep "gradle_build\|export_path" export_presets.cfg
+          echo "=== Fixed export_presets.cfg gradle section ==="
+          grep "gradle" export_presets.cfg
 
       - name: Import project assets
         run: |
           mkdir -p export
-          ~/godot-bin/godot --headless --path . --import 2>&1 | tail -5 || true
+          ~/godot-bin/godot --headless --path . --import 2>&1 || true
+          echo "Import complete"
 
       - name: Export Debug APK
         run: |
           ~/godot-bin/godot --headless --path . --export-debug "Android" export/${{ env.EXPORT_NAME }}-debug.apk
+          echo "Export exit code: $?"
 
       - name: Verify APK
         run: |
           ls -lh export/
-          ls export/*.apk && echo "✅ APK build successful!" || (echo "❌ No APK found!" && exit 1)
+          ls export/*.apk && echo "✅ Build successful!" || (echo "❌ No APK found!" && exit 1)
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
