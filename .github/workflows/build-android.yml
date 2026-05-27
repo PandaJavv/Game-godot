@@ -1,198 +1,224 @@
-name: Build Android APK
+name: Build Godot Android APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, develop]
     tags:
       - 'v*'
   pull_request:
-    branches: [ main, master ]
+    branches: [main]
   workflow_dispatch:
 
 env:
   GODOT_VERSION: "4.2.2"
-  GODOT_RELEASE_NAME: "stable"
-  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-  JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
+  GODOT_RELEASE: "stable"
+  EXPORT_NAME: "CosmicJumper"
 
 jobs:
   build-android:
     name: Build Android APK
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      # ─── Checkout ────────────────────────────────────────────────────────────
+      # ─── Checkout ─────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ─── Java Setup ──────────────────────────────────────────────────────────
-      - name: Set up Java 17
+      # ─── Java ─────────────────────────────────────────────────────────────
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
           java-version: '17'
+          distribution: 'temurin'
 
-      # ─── Android SDK Setup ───────────────────────────────────────────────────
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK components
+      # ─── Android SDK (manual, reliable) ──────────────────────────────────
+      - name: Set up Android SDK & NDK
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager \
-            "build-tools;34.0.0" \
-            "platforms;android-34" \
-            "platform-tools" \
-            "ndk;25.2.9519653"
+          sudo apt-get update -qq
+          sudo apt-get install -y wget unzip
 
-      # ─── Godot Setup ─────────────────────────────────────────────────────────
+          # Use pre-installed Android SDK on GitHub runners
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+
+          # Install required SDK components
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "ndk;23.2.8568313"
+
+          echo "NDK_PATH=$ANDROID_HOME/ndk/23.2.8568313" >> $GITHUB_ENV
+
+      # ─── Generate debug keystore ──────────────────────────────────────────
+      - name: Generate debug keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore $HOME/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          echo "DEBUG_KEYSTORE=$HOME/debug.keystore" >> $GITHUB_ENV
+
+      # ─── Godot Engine ─────────────────────────────────────────────────────
       - name: Cache Godot + templates
         uses: actions/cache@v4
         id: cache-godot
         with:
           path: |
-            ~/.local/share/godot
-            /usr/local/bin/godot
-          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE_NAME }}-v2
+            ~/godot-bin
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-v2
 
-      - name: Download Godot Editor
+      - name: Download Godot & export templates
         if: steps.cache-godot.outputs.cache-hit != 'true'
         run: |
-          FILENAME="Godot_v${GODOT_VERSION}-${GODOT_RELEASE_NAME}_linux.x86_64"
-          URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_RELEASE_NAME}/${FILENAME}.zip"
-          echo "→ Downloading Godot: $URL"
-          wget -q "$URL" -O godot.zip
-          unzip -q godot.zip
-          chmod +x "$FILENAME"
-          sudo mv "$FILENAME" /usr/local/bin/godot
-          godot --version
+          BASE_URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_RELEASE}"
+          mkdir -p ~/godot-bin
 
-      - name: Download Godot Export Templates
-        if: steps.cache-godot.outputs.cache-hit != 'true'
+          echo "⬇️  Downloading Godot ${GODOT_VERSION}..."
+          wget -q "${BASE_URL}/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_linux.x86_64.zip" \
+            -O /tmp/godot.zip
+          unzip -q /tmp/godot.zip -d ~/godot-bin/
+          mv ~/godot-bin/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_linux.x86_64 ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+
+          echo "⬇️  Downloading export templates..."
+          wget -q "${BASE_URL}/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_export_templates.tpz" \
+            -O /tmp/templates.tpz
+
+          TEMPLATE_DIR=~/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}
+          mkdir -p "$TEMPLATE_DIR"
+          unzip -q /tmp/templates.tpz -d /tmp/godot-templates/
+          mv /tmp/godot-templates/templates/* "$TEMPLATE_DIR/"
+          echo "✅ Templates installed to $TEMPLATE_DIR"
+          ls "$TEMPLATE_DIR" | grep android || echo "⚠️  No android templates found!"
+
+      - name: Verify Godot & templates
         run: |
-          FILENAME="Godot_v${GODOT_VERSION}-${GODOT_RELEASE_NAME}_export_templates.tpz"
-          URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_RELEASE_NAME}/${FILENAME}"
-          echo "→ Downloading templates: $URL"
-          wget -q "$URL" -O templates.tpz
-          DEST="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE_NAME}"
-          mkdir -p "$DEST"
-          unzip -q templates.tpz -d /tmp/godot_tpl
-          mv /tmp/godot_tpl/templates/* "$DEST/"
-          echo "✅ Templates installed:"
-          ls "$DEST" | grep android
+          ~/godot-bin/godot --version
+          TEMPLATE_DIR=~/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}
+          echo "Templates:"
+          ls "$TEMPLATE_DIR" | grep -i android
 
-      # ─── Keystore ────────────────────────────────────────────────────────────
-      - name: Generate debug keystore
-        run: |
-          keytool -genkey -v \
-            -keystore "$GITHUB_WORKSPACE/debug.keystore" \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US"
-          echo "✅ Keystore created"
-
-      # ─── Godot Editor Settings ───────────────────────────────────────────────
-      - name: Configure Godot editor settings
+      # ─── Editor settings (Android SDK path + debug keystore) ──────────────
+      - name: Write Godot editor settings
         run: |
           mkdir -p ~/.config/godot
-          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\nexport/android/force_system_user = false\nexport/android/shutdown_adb_on_exit = true\nexport/android/java_sdk_path = "%s"\n' \
-            "$ANDROID_SDK_ROOT" "$GITHUB_WORKSPACE" "$JAVA_HOME" \
-            > ~/.config/godot/editor_settings-4.tres
-          echo "✅ Editor settings written"
+          # Must NOT have leading spaces — Godot parser is strict
+          cat > ~/.config/godot/editor_settings-4.tres << EOF
+[gd_resource type="EditorSettings" format=3]
+
+[resource]
+export/android/android_sdk_path = "$ANDROID_HOME"
+export/android/debug_keystore = "$HOME/debug.keystore"
+export/android/debug_keystore_user = "androiddebugkey"
+export/android/debug_keystore_pass = "android"
+export/android/force_system_user = false
+export/android/shutdown_adb_on_exit = true
+EOF
+          echo "Editor settings written:"
           cat ~/.config/godot/editor_settings-4.tres
 
-      # ─── Install Android Build Template ──────────────────────────────────────
-      - name: Install Godot Android build template into project
+      # ─── Fix export_presets.cfg ────────────────────────────────────────────
+      # Godot headless needs gradle_build disabled (no Android Studio available)
+      - name: Patch export_presets.cfg for CI
         run: |
-          TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE_NAME}"
-          TEMPLATE_ZIP="$TEMPLATES_DIR/android_source.zip"
+          # Disable gradle build — use pre-built templates instead
+          sed -i 's/gradle_build\/use_gradle_build=true/gradle_build\/use_gradle_build=false/' export_presets.cfg
+          # Ensure export path is correct
+          sed -i 's|export_path=".*"|export_path="export/CosmicJumper.apk"|' export_presets.cfg
+          echo "Patched export_presets.cfg:"
+          grep -E "gradle_build|export_path|package/unique" export_presets.cfg
 
-          if [ ! -f "$TEMPLATE_ZIP" ]; then
-            echo "android_source.zip not found in templates, trying release download..."
-            FILENAME="godot-lib.${GODOT_VERSION}.${GODOT_RELEASE_NAME}.release.aar"
-            # Use the android_debug template as fallback source
-            TEMPLATE_ZIP="$TEMPLATES_DIR/android_debug.apk"
+      # ─── Keystore for signed release ──────────────────────────────────────
+      - name: Setup release keystore
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_USER: ${{ secrets.KEYSTORE_USER }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > ~/release.keystore
+            sed -i "s|package/sign_keystore=\"\"|package/sign_keystore=\"$HOME/release.keystore\"|g" export_presets.cfg
+            sed -i "s|package/sign_user=\"\"|package/sign_user=\"$KEYSTORE_USER\"|g" export_presets.cfg
+            sed -i "s|package/sign_password=\"\"|package/sign_password=\"$KEYSTORE_PASSWORD\"|g" export_presets.cfg
+            echo "RELEASE_SIGNING=true" >> $GITHUB_ENV
+          else
+            echo "RELEASE_SIGNING=false" >> $GITHUB_ENV
+            echo "ℹ️  No KEYSTORE_BASE64 secret — will build debug APK"
           fi
 
-          # Create the gradle project structure Godot expects
-          ANDROID_BUILD_DIR="$GITHUB_WORKSPACE/project/android/build"
-          mkdir -p "$ANDROID_BUILD_DIR"
+      # ─── Import project (initialise .godot/ cache) ────────────────────────
+      - name: Import project assets
+        run: |
+          mkdir -p export
+          # Run headless import — this populates .godot/imported/
+          ~/godot-bin/godot --headless --path . --import 2>&1 | tail -5 || true
+          echo "Import done"
 
-          # Extract android source template
-          SOURCE_ZIP="$TEMPLATES_DIR/android_source.zip"
-          if [ -f "$SOURCE_ZIP" ]; then
-            echo "→ Extracting android_source.zip to project..."
-            unzip -q "$SOURCE_ZIP" -d "$ANDROID_BUILD_DIR"
-            echo "✅ Android build template installed"
-            ls "$ANDROID_BUILD_DIR" | head -20
+      # ─── Export ───────────────────────────────────────────────────────────
+      - name: Export Debug APK
+        if: env.RELEASE_SIGNING != 'true'
+        run: |
+          ~/godot-bin/godot \
+            --headless \
+            --path . \
+            --export-debug "Android" \
+            export/${{ env.EXPORT_NAME }}-debug.apk 2>&1
+          echo "Exit code: $?"
+
+      - name: Export Release APK
+        if: env.RELEASE_SIGNING == 'true'
+        run: |
+          ~/godot-bin/godot \
+            --headless \
+            --path . \
+            --export-release "Android" \
+            export/${{ env.EXPORT_NAME }}.apk 2>&1
+          echo "Exit code: $?"
+
+      # ─── Verify ───────────────────────────────────────────────────────────
+      - name: Verify APK output
+        run: |
+          echo "📁 export/ contents:"
+          ls -lh export/ || echo "(empty)"
+          if ls export/*.apk 1>/dev/null 2>&1; then
+            echo "✅ APK build successful!"
+            for apk in export/*.apk; do
+              echo "  📦 $apk — $(du -sh "$apk" | cut -f1)"
+            done
           else
-            echo "⚠️  android_source.zip not found, listing available templates:"
-            ls "$TEMPLATES_DIR"
-            # Try the .aar approach - copy needed files manually
-            mkdir -p "$ANDROID_BUILD_DIR"
-            # Create a minimal version.txt so Godot doesn't complain
-            echo "${GODOT_VERSION}.${GODOT_RELEASE_NAME}" > "$ANDROID_BUILD_DIR/version.txt"
-          fi
-
-          # Create the .gdignore marker that Godot uses to confirm template is installed
-          touch "$GITHUB_WORKSPACE/project/android/build/.gdignore"
-          echo "✅ Build template marker created"
-
-      - name: Verify android template structure
-        run: |
-          echo "=== Android build directory ==="
-          find "$GITHUB_WORKSPACE/project/android" -maxdepth 3 | head -30
-          echo ""
-          echo "=== Available export templates ==="
-          ls "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE_NAME}/" | grep -i android
-
-      # ─── Run Import ──────────────────────────────────────────────────────────
-      - name: Run Godot project import
-        run: |
-          mkdir -p project/builds
-          cd project
-          timeout 90 godot --headless --editor --quit 2>&1 || true
-          echo "✅ Import done"
-
-      # ─── Export APK ──────────────────────────────────────────────────────────
-      - name: Export Android APK
-        run: |
-          cd project
-          echo "→ Starting export..."
-          godot --headless --export-debug "Android" "./builds/CatchTheBall-debug.apk" 2>&1
-          echo "→ Export command finished"
-
-      - name: Verify APK
-        run: |
-          if [ -f "project/builds/CatchTheBall-debug.apk" ]; then
-            echo "✅ APK built successfully!"
-            ls -lh project/builds/
-          else
-            echo "❌ APK not found. Build directory contents:"
-            find project/builds/ -type f 2>/dev/null || echo "(empty)"
+            echo "❌ No APK found!"
             exit 1
           fi
 
-      # ─── Upload ──────────────────────────────────────────────────────────────
-      - name: Upload APK artifact
+      # ─── Upload artifact ──────────────────────────────────────────────────
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CatchTheBall-Android-APK
-          path: project/builds/*.apk
+          name: ${{ env.EXPORT_NAME }}-apk
+          path: export/*.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 60
 
-      # ─── Release ─────────────────────────────────────────────────────────────
+      # ─── GitHub Release on tag ────────────────────────────────────────────
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: project/builds/*.apk
+          files: export/*.apk
           generate_release_notes: true
+          name: "${{ env.EXPORT_NAME }} ${{ github.ref_name }}"
           body: |
-            ## 🎮 CatchTheBall Android Release
-            Download the APK and install on Android 7.0+.
-            Enable "Install from unknown sources" before installing.
+            ## 🎮 ${{ env.EXPORT_NAME }} ${{ github.ref_name }}
+            Download the APK and install on Android.
+            > Enable **"Install from unknown sources"** in Android settings first.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
