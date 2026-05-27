@@ -1,36 +1,30 @@
-# Godot-specific ignores
-.import/
-export.cfg
-export_credentials.cfg
-*.translation
-*.tmp
-
-# Build outputs
-project/builds/
-*.apk
-*.aab
-
-# Android keystore (never commit real keystores!)
-*.keystore
-*.jks
-!debug.keystore
-
-# Editor metadata
+# Godot 4+ specific ignores
 .godot/
-**/.godot/
+*.translation
 
-# OS generated
+# Exported APKs (artifacts handled by CI)
+export/*.apk
+export/*.aab
+
+# Android build artifacts
+android/build/.gradle/
+android/build/build/
+android/build/.cxx/
+
+# OS specific
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Logs
-*.log
+# Keystore (NEVER commit this!)
+*.jks
+*.keystore
 
-# Gradle
-.gradle/
-android/build/
+# Editor-specific
+.idea/
+*.sln
+*.csproj
+
+# Temporary files
+*.tmp
+*.bak
+*~

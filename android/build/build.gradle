@@ -1,0 +1,11 @@
+// android/build/build.gradle
+// This file is used by Godot's Gradle build system
+
+apply from: 'config.gradle'
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}

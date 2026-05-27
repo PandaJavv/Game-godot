@@ -1,21 +1,17 @@
-# 🎮 CatchTheBall - Godot Android Game
+# 🚀 Cosmic Jumper — Godot Android Game
 
-A fun mobile game built with **Godot 4.2** where you catch falling balls to score points. Automatically built for Android using **GitHub Actions**.
-
-![Build Status](https://github.com/YOUR_USERNAME/YOUR_REPO/actions/workflows/build-android.yml/badge.svg)
+An endless vertical platformer game for Android, built with **Godot 4.2** and auto-deployed via **GitHub Actions**.
 
 ---
 
-## 🎯 Gameplay
+## 🎮 Game Overview
 
-- **Drag** your paddle left and right to catch falling balls
-- Different colored balls give different points:
-  - 🔴 Red Ball = 1 point (common)
-  - 🔵 Blue Ball = 2 points (uncommon)
-  - 🟡 Gold Ball = 3 points (rare)
-  - 🟣 Purple Ball = 5 points (very rare!)
-- Miss 3 balls and it's **Game Over**
-- Every 10 points = **Level Up** → balls fall faster!
+**Cosmic Jumper** is a Doodle Jump–style endless jumper where:
+- Your character auto-jumps on every platform
+- Tilt your device (accelerometer) to move left/right
+- Platforms include **Normal**, **Moving**, and **Breakable** types
+- Score increases the higher you climb
+- Game speeds up as your score increases
 
 ---
 
@@ -25,143 +21,156 @@ A fun mobile game built with **Godot 4.2** where you catch falling balls to scor
 godot-android-game/
 ├── .github/
 │   └── workflows/
-│       └── build-android.yml   # GitHub Actions CI/CD
-├── project/
-│   ├── scenes/
-│   │   ├── Main.tscn           # Main game scene
-│   │   └── Ball.tscn           # Ball scene
-│   ├── scripts/
-│   │   ├── Main.gd             # Game controller
-│   │   ├── Player.gd           # Player paddle + touch controls
-│   │   ├── Ball.gd             # Ball behavior
-│   │   └── UIManager.gd        # UI management
-│   ├── assets/                 # Sprites, sounds, fonts
-│   ├── project.godot           # Godot project config
-│   └── export_presets.cfg      # Android export config
-├── .gitignore
-└── README.md
+│       └── build-android.yml   # CI/CD pipeline
+├── scenes/
+│   ├── Main.tscn               # Main game scene
+│   ├── Player.tscn             # Player character
+│   └── Platform.tscn           # Platform object
+├── scripts/
+│   ├── Main.gd                 # Game controller logic
+│   ├── Player.gd               # Player physics & input
+│   └── Platform.gd             # Platform behavior
+├── assets/
+│   ├── sprites/                # Game graphics
+│   └── sounds/                 # Audio files
+├── android/build/              # Godot Gradle build files
+├── export/                     # APK output (git-ignored)
+├── export_presets.cfg          # Android export configuration
+└── project.godot               # Godot project settings
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🛠️ Local Development Setup
 
 ### Prerequisites
-- [Godot 4.2.2](https://godotengine.org/download/) (stable)
-- Android Studio or Android SDK (for local builds)
-- Java 17
 
-### Run Locally
-1. Clone this repository:
+| Tool | Version |
+|------|---------|
+| [Godot Engine](https://godotengine.org/download) | 4.2.2 stable |
+| [Android Studio](https://developer.android.com/studio) | Latest |
+| Java JDK | 17+ |
+
+### Steps
+
+1. **Clone the repo**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-   cd YOUR_REPO
+   git clone https://github.com/YOUR_USERNAME/cosmic-jumper.git
+   cd cosmic-jumper
    ```
 
-2. Open Godot Editor → **Import Project** → select `project/project.godot`
+2. **Open in Godot**
+   - Launch Godot 4.2
+   - Click **Import** → select `project.godot`
 
-3. Press **F5** to run in the editor (desktop mode)
+3. **Configure Android SDK in Godot**
+   - Go to **Editor → Editor Settings**
+   - Navigate to **Export → Android**
+   - Set **Android SDK Path** to your Android SDK directory
+     - macOS: `~/Library/Android/sdk`
+     - Linux: `~/Android/Sdk`
+     - Windows: `C:\Users\<user>\AppData\Local\Android\Sdk`
 
-### Build Android APK Locally
-1. In Godot Editor, go to **Project → Export**
-2. Select the **Android** preset
-3. Set your Android SDK path
-4. Click **Export Project**
+4. **Install Android Export Templates**
+   - Go to **Editor → Manage Export Templates**
+   - Download templates for Godot 4.2.2
+
+5. **Run on device or emulator**
+   - Connect Android device (USB debugging enabled) or start emulator
+   - Click the **Remote Debug** button in the top bar
 
 ---
 
-## ⚙️ GitHub Actions CI/CD
+## 🤖 GitHub Actions CI/CD
 
-The workflow automatically builds an Android APK on every push.
+### How It Works
 
-### Workflow Triggers
-| Event | Action |
-|-------|--------|
-| Push to `main`/`master` | Build debug APK |
-| Pull Request | Build & verify APK |
-| Push tag `v*` | Build + create GitHub Release |
-| Manual trigger | `workflow_dispatch` |
+The workflow (`.github/workflows/build-android.yml`) triggers on:
+- ✅ Push to `main` or `develop`
+- ✅ Pull requests to `main`
+- ✅ Tag pushes (`v1.0.0`, `v2.0.0`, etc.)
+- ✅ Manual trigger via **Actions → Run workflow**
 
-### How to Use
+### Build Matrix
 
-**Download a build:**
-1. Go to **Actions** tab in your GitHub repo
-2. Click the latest workflow run
-3. Download the `CatchTheBall-Android-APK` artifact
+| Event | APK Type | Uploaded To |
+|-------|----------|-------------|
+| Pull Request | Debug | Actions Artifacts |
+| Push to `main` (no keystore) | Debug | Actions Artifacts |
+| Push to `main` (with keystore) | Release (signed) | Actions Artifacts |
+| Tag `v*` (with keystore) | Release (signed) | GitHub Releases |
 
-**Create a release:**
+---
+
+## 🔐 Setting Up Signing (Optional but Recommended)
+
+### 1. Generate a Keystore
+
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+keytool -genkey -v \
+  -keystore cosmic-jumper.jks \
+  -alias cosmic-jumper \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 10000
 ```
-This will automatically create a GitHub Release with the APK attached.
+
+### 2. Convert to Base64
+
+```bash
+# Linux/macOS
+base64 -w 0 cosmic-jumper.jks
+
+# Windows (PowerShell)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("cosmic-jumper.jks"))
+```
+
+### 3. Add GitHub Secrets
+
+Go to **Settings → Secrets and variables → Actions** and add:
+
+| Secret | Value |
+|--------|-------|
+| `KEYSTORE_BASE64` | Base64-encoded content of your `.jks` file |
+| `KEYSTORE_USER` | Alias used when creating the keystore |
+| `KEYSTORE_PASSWORD` | Password for the keystore |
+
+> ⚠️ **Never commit your `.jks` file to the repository!**
 
 ---
 
-## 🔐 Release Signing (Optional)
+## 🚀 Releasing a New Version
 
-For production builds, set up a release keystore:
+1. Update version in `project.godot`:
+   ```ini
+   config/version="1.1.0"
+   ```
 
-1. Generate a release keystore:
+2. Commit and push:
    ```bash
-   keytool -genkey -v -keystore release.keystore \
-     -alias mykey -keyalg RSA -keysize 2048 -validity 10000
+   git add .
+   git commit -m "chore: bump version to 1.1.0"
+   git tag v1.1.0
+   git push origin main --tags
    ```
 
-2. Add secrets to your GitHub repository (**Settings → Secrets**):
-   ```
-   RELEASE_KEYSTORE_BASE64    # base64-encoded keystore file
-   RELEASE_KEYSTORE_ALIAS     # key alias
-   RELEASE_KEYSTORE_PASS      # store password
-   RELEASE_KEY_PASS           # key password
-   ```
-
-3. Update the workflow to use release signing.
+3. GitHub Actions will:
+   - Build a signed release APK
+   - Create a GitHub Release automatically
+   - Attach the APK to the release
 
 ---
 
-## 🎨 Customization
+## 🎯 Controls
 
-### Change Ball Speed
-In `project/scripts/Main.gd`:
-```gdscript
-const INITIAL_SPAWN_INTERVAL = 1.5  # Lower = faster spawning
-```
-
-### Add New Ball Types
-In `project/scripts/Ball.gd`, add to `BALL_TYPES` array:
-```gdscript
-{"color": Color(0, 1, 0), "points": 10, "size": 8},  # Green - ultra rare
-```
-
-### Modify Level Progression
-In `project/scripts/Main.gd`:
-```gdscript
-const LEVEL_UP_SCORE = 10  # Points needed to level up
-const MIN_SPAWN_INTERVAL = 0.4  # Fastest spawn rate
-```
-
----
-
-## 📱 Android Requirements
-
-- **Minimum SDK:** Android 7.0 (API 24)
-- **Target SDK:** Android 14 (API 34)
-- **Architecture:** arm64-v8a, armeabi-v7a
-
----
-
-## 🛠️ Tech Stack
-
-- **Game Engine:** Godot 4.2.2
-- **Language:** GDScript
-- **CI/CD:** GitHub Actions
-- **Build:** Gradle + Android SDK
+| Platform | Control |
+|---------|---------|
+| Android (device) | Tilt phone left/right |
+| Android (emulator) | Swipe left/right on screen |
+| Desktop (testing) | Arrow keys ← → |
 
 ---
 
 ## 📄 License
 
-MIT License — feel free to use this as a template for your own Godot Android games!
-# Gamee
-# Gamee
+MIT License — feel free to use this as a template for your own Godot Android game!
